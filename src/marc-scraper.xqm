@@ -115,6 +115,7 @@ declare function ms:parse-docs() {
     <data db="{$db}">{
       
       for $doc in $data/*/data[@status = "200"][normalize-space(@code)]
+                              [not(ms:is-appendix-field(.))]
       let $h1 := string-join($doc//h1//text())
       return element {$db} {
         attribute {"code"} {$doc/@code},
@@ -189,6 +190,62 @@ declare function ms:parse-docs() {
 };
 
 
+
+(:~
+ : Is this field local or obsolete rather than part of the format?
+ :
+ : LC keeps the page for a retired field online indefinitely, and the page still
+ : carries a full subfield and indicator table, so nothing in the field's own
+ : description says it has been withdrawn.  The breadcrumb does: a current field
+ : is filed under its group (046 under 01X-09X), while a retired or
+ : United-States-local one is filed under Appendix H, Local Data Elements.  For
+ : bibliographic that separates 261, 262, 400, 410, 411 and 440 from the rest,
+ : which is the same set a cataloguer would name.
+ :
+ : Do not trust the breadcrumb's other links: 440 is also filed under Community
+ : Information 01X-08X, which is a different format altogether.  Matching the
+ : appendix rather than the group tolerates that.
+ :
+ : The leader has no breadcrumb, so it is never excluded by this test.
+ :
+ : @param $doc The stored page
+ : @return True if the page files the field under an appendix
+ :)
+declare function ms:is-appendix-field(
+  $doc as element(data)
+) as xs:boolean {
+
+  some $a in $doc//div[@class = "head-nav"]//a
+  satisfies matches($a/@href, "apndx[a-z]*\.html$")
+
+};
+
+(:~
+ : Reports the fields ms:is-appendix-field excludes, so the exclusion is visible
+ : rather than a silent shrinking of the format.
+ :)
+declare function ms:excluded-fields() {
+
+  for $db in ("authority", "bibliographic", "holdings")
+  return
+    <data db="{$db}">{
+      for $doc in db:get("marc-" || $db || "-docs")/*/data[@status = "200"]
+                    [normalize-space(@code)][ms:is-appendix-field(.)]
+      return
+        <field code="{$doc/@code}">{
+          ms:parse-title(normalize-space(string-join($doc//h1//text()))),
+          <filed-under>{
+            string-join(
+              distinct-values(
+                for $a in $doc//div[@class = "head-nav"]//a[ends-with(@href, ".html")]
+                return replace($a/data(@href), "^.*/", "")
+              ), " "
+            )
+          }</filed-under>
+        }</field>
+    }</data>
+
+};
 
 (:~
  : Splits a cell into the runs of content separated by <br/>.

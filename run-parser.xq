@@ -121,3 +121,27 @@ for $p in ms:parse-docs()
     }
   ) ! proc:execute("jq", ("-sS", ., "."))/output/text()
 )
+(: Record what the format-currency filter removed, so a shrinking field count is
+ : traceable to LC retiring a field rather than to a scraping failure. :)
+,
+file:write-text($ms:DIR||"excluded_fields.json",
+  serialize(
+    <fn:map>{
+      for $d in ms:excluded-fields()
+      return
+        <fn:map key="{$d/@db}">{
+          for $f in $d/field
+          return
+            <fn:map key="{$f/@code}">
+              <fn:string key="label">{$f/data(title)}</fn:string>
+              <fn:string key="filed_under">{$f/data(filed-under)}</fn:string>
+            </fn:map>
+        }</fn:map>
+    }</fn:map>,
+    map {
+      "method": "json", "escape-solidus": "no", "json": map {
+        "format": "basic", "indent": "yes"
+      }
+    }
+  ) ! proc:execute("jq", ("-sS", ., "."))/output/text()
+)
