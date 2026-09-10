@@ -103,12 +103,62 @@ for $p in ms:parse-docs()
                 }
               </fn:map>             
             }</fn:map>         
+          (: What LC used to define here.  `reissued` is the load-bearing flag:
+           : a code in the history that is ALSO in the current subfield table
+           : has been given a new meaning, not withdrawn -- 8 of 59 on the
+           : bibliographic format, six of them on 856 alone.  Consumers asking
+           : "may I ignore this?" must read `obsolete_now`, never mere presence. :)
+          let $obsolete := <fn:map key="obsolete">{
+            let $current := $field/subfields[1]/subfield/data/key/string()
+            return (
+              (: Arrays, not maps.  A code can be retired MORE THAN ONCE -- LC
+               : lists a separate history line per format context, so 5 fields
+               : carry two entries for the same code and a map collides on the
+               : second.  The history is a log of events, not a lookup. :)
+              <fn:array key="subfields">{
+                for $o in $field/obsolete/subfield
+                let $code := $o/data(@code)
+                return <fn:map>
+                  <fn:string key="code">{$code}</fn:string>
+                  <fn:string key="label">{$o/string()}</fn:string>
+                  <fn:string key="year">{$o/data(@year)}</fn:string>
+                  <fn:boolean key="reissued">{$code = $current}</fn:boolean>
+                  <fn:boolean key="obsolete_now">{not($code = $current)}</fn:boolean>
+                </fn:map>
+              }</fn:array>,
+              <fn:array key="indicator_values">{
+                for $o in $field/obsolete/indicator-value
+                return <fn:map>
+                  <fn:string key="indicator">{$o/data(@n)}</fn:string>
+                  <fn:string key="value">{$o/data(@code)}</fn:string>
+                  <fn:string key="label">{$o/string()}</fn:string>
+                  <fn:string key="year">{$o/data(@year)}</fn:string>
+                </fn:map>
+              }</fn:array>,
+              <fn:array key="indicators">{
+                for $o in $field/obsolete/indicator
+                return <fn:map>
+                  <fn:string key="indicator">{$o/data(@n)}</fn:string>
+                  <fn:string key="label">{$o/string()}</fn:string>
+                  <fn:string key="year">{$o/data(@year)}</fn:string>
+                </fn:map>
+              }</fn:array>,
+              <fn:array key="history">{
+                for $o in $field/obsolete/history
+                return <fn:map>
+                  <fn:string key="text">{$o/string()}</fn:string>
+                  <fn:string key="year">{$o/data(@year)}</fn:string>
+                </fn:map>
+              }</fn:array>
+            )
+          }</fn:map>
           return         
             <fn:map key="{$key}">
               <fn:string key="label">{$name}</fn:string>
               {if ($positions/*) {$positions}}
               {if ($indicators/*) {$indicators/*}}
               {if ($subfields/*) {$subfields}}
+              {if ($field/obsolete/*) {$obsolete}}
               <fn:boolean key="repeatable">{$repeatable}</fn:boolean>
             </fn:map>
           }</fn:map>            

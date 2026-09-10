@@ -122,6 +122,10 @@ declare function ms:parse-docs() {
         
         ms:parse-title(normalize-space($h1)),
         ms:parse-repeat($h1)
+        ,
+        (: Retired designators, for every field shape -- data, fixed and MFHD
+         : group alike, since Leader and 007 carry a history section too. :)
+        ms:parse-obsolete($doc)
         ,      
         if ($db = "holdings" and $doc/@code = (
           "853", 
@@ -730,4 +734,65 @@ declare function ms:parse-subfields(
         }</subfield>
       )
   }</subfields>
+};
+
+
+(:~
+ : What this field used to define, and stopped.
+ :
+ : LC keeps retired content designators in a "Content Designator History"
+ : section rather than in the subfield and indicator tables, so a withdrawn
+ : element is simply absent from everything else this module reads.  That makes
+ : it indistinguishable, from the schema alone, from an element LC never
+ : documented -- and the two need opposite treatment in a conversion, since an
+ : obsolete subfield needs no support and an undocumented one may.
+ :
+ : Three properties of the section that each produced a wrong answer first:
+ :
+ : * A code can be retired and later REISSUED with a different meaning.  856 $l
+ :   was "Logon" (obsolete 2020) and is now "Standardized information governing
+ :   access".  This function reports what the history says; deciding whether a
+ :   code is obsolete *now* means checking it is also absent from the current
+ :   subfield table, which the caller can do because both are in scope.
+ : * The indicator POSITION is contextual.  A line reads "0 - United States
+ :   [OBSOLETE]" and never names its indicator, so it has to come from the
+ :   nearest preceding "Indicator N" heading.  Reading it from the line yields
+ :   nothing at all.
+ : * Leader and 007 byte values appear here too, in a third shape that is
+ :   neither subfield nor indicator.  They are kept as <history> rather than
+ :   discarded, so a later pass can classify them without a re-scrape.
+ :)
+declare function ms:parse-obsolete(
+  $doc as element()
+) as element(obsolete) {
+
+  <obsolete>{
+    for $e in $doc//*[contains(., "OBSOLETE")][not(.//*[contains(., "OBSOLETE")])]
+    let $s := normalize-space(string($e))
+    let $ctx := (
+      for $n in $e/preceding::*[
+                  matches(normalize-space(string(.)), "^Indicator\s*[12]\b")][
+                  not(.//*[matches(normalize-space(string(.)), "^Indicator\s*[12]\b")])]
+      return normalize-space(string($n))
+    )[last()]
+    let $year :=
+      if (matches($s, "\[OBSOLETE,\s*[0-9][0-9][0-9][0-9]"))
+      then replace($s, "^.*\[OBSOLETE,\s*([0-9][0-9][0-9][0-9]).*$", "$1")
+      else ""
+    let $label := normalize-space(replace($s, "^.*?\s+-\s+(.*?)\s*\[OBSOLETE.*$", "$1"))
+    return
+      if (matches($s, "^\$[a-z0-9]\s+-\s+"))
+      then <subfield code="{substring($s, 2, 1)}" year="{$year}">{$label}</subfield>
+      else if (matches($s, "^Indicator\s*[12]\s+-\s+"))
+      then <indicator n="{replace($s, '^Indicator\s*([12]).*$', '$1')}"
+                      year="{$year}">{$label}</indicator>
+      else if (matches($s, "^[0-9#]\s+-\s+"))
+      then <indicator-value
+              n="{if (matches($ctx, '^Indicator\s*[12]'))
+                  then replace($ctx, '^Indicator\s*([12]).*$', '$1') else '?'}"
+              code="{if (substring($s, 1, 1) = '#') then ' ' else substring($s, 1, 1)}"
+              year="{$year}">{$label}</indicator-value>
+      else <history year="{$year}">{$s}</history>
+  }</obsolete>
+
 };
